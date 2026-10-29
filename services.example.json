@@ -1,0 +1,85 @@
+{
+  "services": [
+    {
+      "id": "llama",
+      "name": "llama.cpp server",
+      "desc": "Local LLM served by llama-server (example user unit)",
+      "group": "llm",
+      "port": 8080,
+      "control": {
+        "type": "user-unit",
+        "unit": "llama.service"
+      },
+      "log": {
+        "type": "journal-user",
+        "unit": "llama.service"
+      }
+    },
+    {
+      "id": "demo-app",
+      "name": "Example app",
+      "desc": "Script-managed static web server",
+      "group": "app",
+      "port": 8188,
+      "health": "/",
+      "control": {
+        "type": "script",
+        "start": [
+          "bash",
+          "-c",
+          "exec python3 -m http.server 8188"
+        ],
+        "stop": [
+          "pkill",
+          "-f",
+          "http.server 8188"
+        ]
+      },
+      "log": {
+        "type": "file",
+        "path": "~/.local/state/llm-panel/example-app.log"
+      },
+      "extra": []
+    }
+  ],
+  "profiles": [
+    {
+      "id": "llm-only",
+      "name": "LLM only",
+      "desc": "Stop the example app and start the LLM",
+      "stop": [
+        "demo-app"
+      ],
+      "start": [
+        "llama"
+      ],
+      "upstream": "http://127.0.0.1:8080"
+    },
+    {
+      "id": "gpu-free",
+      "name": "GPU free",
+      "desc": "Stop every GPU-hungry service",
+      "stop": [
+        "llama",
+        "demo-app"
+      ]
+    }
+  ],
+  "ui": {
+    "upstreams": [
+      {
+        "name": "Primary",
+        "url": "http://127.0.0.1:8080"
+      },
+      {
+        "name": "Secondary",
+        "url": "http://127.0.0.1:8081"
+      }
+    ],
+    "links": {
+      "llama": "http://127.0.0.1:8080",
+      "demo-app": "http://127.0.0.1:8188"
+    },
+    "desktop_gpu": false
+  }
+}

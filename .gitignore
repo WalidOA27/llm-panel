@@ -1,0 +1,7 @@
+services.json
+services.json.bak*
+*.bak
+__pycache__/
+*.pyc
+*.log
+.venv/

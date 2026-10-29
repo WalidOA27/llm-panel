@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLM Panel</title>
+<style>
+  :root { --bg:#131317; --panel:#1d1d23; --panel2:#24242c; --line:#2f2f3a; --text:#e7e7ee; --muted:#8f8fa0;
+          --accent:#f66744; --ok:#5fbf7f; --warn:#e0b050; --bad:#ef6a5e; --blue:#6aa8ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui, sans-serif; }
+  main { max-width:1180px; margin:0 auto; padding:20px 16px 48px; }
+  header { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+  h1 { font-size:20px; margin:0; } h1 span { color:var(--accent); }
+  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:22px 0 10px; font-weight:600; }
+  .muted { color:var(--muted); } .small { font-size:12px; }
+  .grid { display:grid; gap:10px; }
+  .stats { grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); }
+  .cards { grid-template-columns:repeat(auto-fill, minmax(330px, 1fr)); }
+  .box { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .stat .v { font-size:20px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .bar { height:6px; background:var(--panel2); border-radius:3px; overflow:hidden; margin-top:8px; display:flex; }
+  .bar i { display:block; height:100%; background:var(--blue); }
+  .vrambar { height:14px; border-radius:4px; }
+  .vrambar i { border-right:1px solid var(--bg); }
+  .legend { display:flex; gap:12px; flex-wrap:wrap; margin-top:8px; font-size:12px; color:var(--muted); }
+  .legend b { display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:5px; vertical-align:-1px; }
+  .card { display:flex; flex-direction:column; gap:8px; }
+  .card .top { display:flex; align-items:center; gap:8px; }
+  .dot { width:9px; height:9px; border-radius:50%; background:var(--muted); flex:none; }
+  .dot.ready { background:var(--ok); box-shadow:0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent); }
+  .dot.loading, .dot.starting, .dot.stopping, .dot.restarting { background:var(--warn); animation:pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity:.35; } }
+  .card .name { font-weight:600; } .card .state { margin-left:auto; font-size:12px; color:var(--muted); }
+  .kv { display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .kv b { color:var(--text); font-weight:500; }
+  .btns { display:flex; gap:6px; flex-wrap:wrap; margin-top:auto; }
+  button { background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:7px; padding:6px 12px; font:inherit; font-size:13px; cursor:pointer; }
+  button:hover:not(:disabled) { border-color:var(--muted); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  button.danger:hover:not(:disabled) { border-color:var(--bad); color:var(--bad); }
+  button:disabled { opacity:.4; cursor:default; }
+  .profile { display:flex; flex-direction:column; gap:6px; }
+  .profile .name { font-weight:600; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; background:transparent; }
+  .seg button.on { background:var(--accent); color:#fff; }
+  .row { display:flex; gap:16px; flex-wrap:wrap; align-items:center; }
+  .events { font:12px/1.6 ui-monospace, monospace; max-height:180px; overflow:auto; }
+  .events .bad { color:var(--bad); }
+  a { color:var(--blue); text-decoration:none; } a:hover { text-decoration:underline; }
+  dialog { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:10px; width:min(1000px, 94vw); padding:0; }
+  dialog::backdrop { background:rgb(0 0 0 / .6); }
+  dialog header { padding:10px 14px; border-bottom:1px solid var(--line); margin:0; }
+  dialog pre { margin:0; padding:12px 14px; max-height:70vh; overflow:auto; font:12px/1.5 ui-monospace, monospace; white-space:pre-wrap; word-break:break-all; }
+</style>
+</head>
+<body>
+<main>
+  <header><h1><span>LLM</span> Panel</h1><span class="muted small" id="updated"></span></header>
+
+  <section class="grid stats" id="stats"></section>
+  <div class="box" style="margin-top:10px">
+    <div class="row"><b>VRAM</b><span class="muted small" id="vramtxt"></span></div>
+    <div class="bar vrambar" id="vrambar"></div>
+    <div class="legend" id="vramlegend"></div>
+  </div>
+
+  <h2>Profiles</h2>
+  <section class="grid stats" id="profiles"></section>
+
+  <h2>LLM</h2>
+  <section class="grid cards" id="llm"></section>
+  <h2>Apps</h2>
+  <section class="grid cards" id="app"></section>
+
+  <h2 id="settings-title">Settings</h2>
+  <section class="grid stats" id="settings">
+    <div class="box" id="upstreambox"><div class="muted small">Upstream</div><div class="seg" id="upstream" style="margin-top:8px"></div></div>
+    <div class="box" id="deskbox"><div class="muted small">Desktop GPU (requires logout)</div><div class="seg" id="desk" style="margin-top:8px"></div></div>
+  </section>
+
+  <h2>Activity</h2>
+  <div class="box events" id="events"></div>
+</main>
+
+<dialog id="logdlg"><header class="row"><b id="logtitle"></b><button style="margin-left:auto" onclick="logdlg.close()">Close</button></header><pre id="logbody"></pre></dialog>
+
+<script>
+const COLORS = ["#6aa8ff", "#f66744", "#5fbf7f", "#c387ff", "#e0b050", "#4fd1c5"];
+const gb = b => b == null ? "—" : (b / 2**30).toFixed(1) + " GB";
+const pct = (a, b) => b ? Math.min(100, a / b * 100) : 0;
+let S = null;
+
+async function post(url, body) {
+  await fetch(url, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  setTimeout(refresh, 300);
+}
+const act = (id, action) => {
+  if (action === "stop" && !confirm("Stop this service?")) return;
+  post("/api/action", {id, action});
+};
+async function showLog(id, name) {
+  logtitle.textContent = "Log · " + name; logbody.textContent = "Loading…"; logdlg.showModal();
+  const d = await (await fetch("/api/log?id=" + id)).json();
+  logbody.textContent = d.log; logbody.scrollTop = logbody.scrollHeight;
+}
+
+function stat(label, value, sub, frac) {
+  return `<div class="box stat"><div class="muted small">${label}</div><div class="v">${value}</div>
+          ${sub ? `<div class="muted small">${sub}</div>` : ""}${frac != null ? `<div class="bar"><i style="width:${frac}%"></i></div>` : ""}</div>`;
+}
+
+function card(s, links) {
+  const busy = ["starting", "stopping", "restarting"].includes(s.state);
+  const on = s.state === "ready" || s.state === "loading";
+  const kv = [];
+  if (s.model) kv.push(`<span>model <b>${s.model}</b></span>`);
+  if (s.vram) kv.push(`<span>VRAM <b>${gb(s.vram)}</b></span>`);
+  if (s.rss) kv.push(`<span>RAM <b>${gb(s.rss)}</b></span>`);
+  if (s.tg) kv.push(`<span>gen <b>${s.tg.toFixed(1)} t/s</b></span>`);
+  if (s.pp) kv.push(`<span>prompt <b>${s.pp.toFixed(0)} t/s</b></span>`);
+  if (s.tokens_total) kv.push(`<span>tokens <b>${Math.round(s.tokens_total).toLocaleString()}</b></span>`);
+  kv.push(`<span>:${s.port}${s.pid ? " · pid " + s.pid : ""}</span>`);
+  const link = links[s.id] && s.state === "ready" ? ` · <a href="${links[s.id]}" target="_blank">open</a>` : "";
+  return `<div class="box card">
+    <div class="top"><span class="dot ${s.state}"></span><span class="name">${s.name}</span><span class="state">${s.state}</span></div>
+    <div class="muted small">${s.desc}${link}</div>
+    <div class="kv">${kv.join("")}</div>
+    <div class="btns">
+      <button class="primary" ${on || busy ? "disabled" : ""} onclick="act('${s.id}','start')">Start</button>
+      <button class="danger" ${!on || busy ? "disabled" : ""} onclick="act('${s.id}','stop')">Stop</button>
+      <button ${!on || busy ? "disabled" : ""} onclick="act('${s.id}','restart')">Restart</button>
+      ${s.extra.map(e => `<button ${s.state !== "ready" || busy ? "disabled" : ""} onclick="act('${s.id}','${e.action}')">${e.label}</button>`).join("")}
+      <button onclick="showLog('${s.id}', '${s.name}')">Log</button>
+    </div></div>`;
+}
+
+function render() {
+  const {system: y, services, profiles, events} = S;
+  const ui = S.ui || {};
+  const links = ui.links || {};
+  const upstreams = ui.upstreams || [];
+  const g = y.gpu, r = y.ram;
+  stats.innerHTML =
+    stat("GPU load", (g.busy ?? "—") + " %", `${g.temp ?? "—"} °C · ${g.power ? g.power.toFixed(0) : "—"} W`, g.busy) +
+    stat("VRAM", gb(g.vram_used), "of " + gb(g.vram_total), pct(g.vram_used, g.vram_total)) +
+    stat("GTT (shared RAM)", gb(g.gtt_used), "of " + gb(g.gtt_total), pct(g.gtt_used, g.gtt_total)) +
+    stat("Free RAM", gb(r.available), "of " + gb(r.total), pct(r.total - r.available, r.total)) +
+    stat("Swap", gb(r.swap_used), "of " + gb(r.swap_total), pct(r.swap_used, r.swap_total)) +
+    stat("Free disk", gb(y.disk.free), `load ${y.load.map(x => x.toFixed(1)).join(" · ")}`, pct(y.disk.total - y.disk.free, y.disk.total));
+
+  const users = services.filter(s => s.vram > 64 * 2**20).concat(S.others || []);
+  const known = users.reduce((a, s) => a + s.vram, 0);
+  const other = Math.max(0, g.vram_used - known);
+  const parts = users.map((s, i) => [s.name, s.vram, COLORS[i % COLORS.length]]).concat([["Other / desktop", other, "#55556a"]]);
+  vrambar.innerHTML = parts.map(([, v, c]) => `<i style="width:${pct(v, g.vram_total)}%;background:${c}"></i>`).join("");
+  vramlegend.innerHTML = parts.map(([n, v, c]) => `<span><b style="background:${c}"></b>${n} ${gb(v)}</span>`).join("") +
+                         `<span>Free ${gb(g.vram_total - g.vram_used)}</span>`;
+  vramtxt.textContent = `${gb(g.vram_used)} / ${gb(g.vram_total)}`;
+
+  document.querySelector("#profiles").innerHTML = profiles.map(p => `<div class="box profile"><span class="name">${p.name}</span>
+      <span class="muted small">${p.desc}</span><div><button onclick="if(confirm('Apply “${p.name}”?')) post('/api/profile',{id:'${p.id}'})">Apply</button></div></div>`).join("");
+  llm.innerHTML = services.filter(s => s.group === "llm").map(s => card(s, links)).join("");
+  app.innerHTML = services.filter(s => s.group === "app").map(s => card(s, links)).join("");
+
+  upstream.innerHTML = upstreams.map(u => `<button class="${ui.current_upstream === u.url ? "on" : ""}" onclick="post('/api/upstream',{url:'${u.url}'})">${u.name}</button>`).join("");
+  desk.innerHTML = [["Discrete GPU", "dgpu"], ["iGPU", "igpu"]].map(([n, m]) =>
+    `<button class="${y.desktop_gpu === m ? "on" : ""}" onclick="if(confirm('This changes the desktop GPU; you will need to log out. Continue?')) post('/api/desktop-gpu',{mode:'${m}'})">${n}</button>`).join("");
+  document.getElementById("upstreambox").style.display = upstreams.length ? "" : "none";
+  document.getElementById("deskbox").style.display = ui.desktop_gpu ? "" : "none";
+  const hasSettings = upstreams.length || ui.desktop_gpu;
+  document.getElementById("settings").style.display = hasSettings ? "" : "none";
+  document.getElementById("settings-title").style.display = hasSettings ? "" : "none";
+  document.querySelector("#events").innerHTML = events.length ? events.map(e => `<div class="${e.ok ? "" : "bad"}">${e.t} · ${e.msg}</div>`).join("") : '<span class="muted">No activity yet</span>';
+  updated.textContent = "updated " + new Date().toLocaleTimeString();
+}
+
+async function refresh() {
+  try { S = await (await fetch("/api/status")).json(); render(); }
+  catch { updated.textContent = "panel offline"; }
+}
+refresh(); setInterval(refresh, 3000);
+</script>
+</body>
+</html>
